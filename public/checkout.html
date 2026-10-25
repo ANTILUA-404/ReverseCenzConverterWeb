@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en" class="inter_2fe1ab3d-module__-T-KAq__variable space_grotesk_e80ffa63-module__0qOiLG__variable jetbrains_mono_f3eb197e-module__TaZ8cG__variable">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CENZ STUDIO — Checkout</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/assets/favicon.ico" />
+    <link rel="stylesheet" href="/assets/cenz.css" />
+    <link rel="stylesheet" href="/assets/app.css" />
+    <style>
+      .checkout-wrap {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px 18px;
+        background:
+          radial-gradient(60rem 30rem at 50% -10%, rgba(255, 255, 255, 0.06), transparent 60%),
+          var(--bg);
+      }
+      .checkout {
+        width: min(520px, 100%);
+        display: grid;
+        gap: 16px;
+      }
+      .checkout-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .checkout-head img {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+      }
+      .checkout-head span {
+        font-family: var(--font-heading);
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .summary {
+        display: grid;
+        gap: 10px;
+      }
+      .summary-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .summary-row strong {
+        color: var(--fg);
+        font-weight: 500;
+      }
+      .summary-total {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+        font-family: var(--font-heading);
+        font-size: 18px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body class="app">
+    <div class="checkout-wrap">
+      <div class="checkout">
+        <div class="checkout-head">
+          <img src="/assets/logo.png" alt="" />
+          <span>CENZ STUDIO</span>
+          <a class="btn btn-ghost btn-sm" href="/dashboard" style="margin-left: auto">Back to workspace</a>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="eyebrow">Checkout</span><h3 id="plan-title">Loading…</h3></div>
+          <div class="card-body" style="display: grid; gap: 18px">
+            <div class="summary" id="summary"></div>
+            <div class="summary-total"><span>Total</span><span id="total">—</span></div>
+            <button class="btn" type="button" id="pay-btn">Pay with Midtrans</button>
+            <p class="hint" id="pay-note"></p>
+          </div>
+        </div>
+
+        <p class="hint" style="text-align: center">
+          Payments run through Midtrans — card details never reach our servers.
+        </p>
+      </div>
+    </div>
+
+    <div class="toast-stack" id="toasts"></div>
+
+    <script>
+      (function () {
+        const params = new URLSearchParams(location.search);
+        const planId = params.get('plan') || 'free';
+        const $ = (s) => document.querySelector(s);
+
+        function fmtIdr(n) {
+          return 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+        }
+
+        function toast(msg, kind) {
+          const el = document.createElement('div');
+          el.className = 'toast' + (kind ? ' is-' + kind : '');
+          el.textContent = msg;
+          $('#toasts').appendChild(el);
+          setTimeout(() => el.remove(), 4200);
+        }
+
+        async function boot() {
+          try {
+            const data = await fetch('/api/plans').then((r) => r.json());
+            const plan = (data.plans || []).find((p) => p.id === planId);
+            if (!plan) throw new Error('Unknown plan');
+
+            $('#plan-title').textContent = `CENZ ${plan.label.en}`;
+
+            const rows = [
+              ['Plan', plan.label.en],
+              ['Duration', plan.days ? plan.days + ' days' : 'Forever'],
+              ['Conversions', plan.unlimited ? 'Unlimited' : plan.conversionsPerDay + ' / 24h'],
+              ['Batch size', plan.batchSize + ' song(s)'],
+              ['Speed control', plan.speedControl ? 'Yes' : 'Default only'],
+              ['Priority support', plan.prioritySupport ? 'Yes' : '—'],
+            ];
+
+            $('#summary').innerHTML = rows
+              .map(
+                ([k, v]) =>
+                  `<div class="summary-row"><span>${k}</span><strong>${v}</strong></div>`
+              )
+              .join('');
+
+            $('#total').textContent = plan.priceIdr === 0 ? 'Free' : fmtIdr(plan.priceIdr);
+
+            if (plan.priceIdr === 0) {
+              $('#pay-btn').textContent = 'Start using the free plan';
+            }
+
+            $('#pay-note').textContent = data.midtransConfigured
+              ? 'You will be redirected to the Midtrans payment page.'
+              : 'Midtrans is not configured on this instance — the order is queued for manual activation.';
+
+            $('#pay-btn').addEventListener('click', async () => {
+              $('#pay-btn').disabled = true;
+              try {
+                const res = await fetch('/api/checkout', {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ plan: planId }),
+                }).then((r) => r.json());
+
+                if (res.redirectUrl) {
+                  location.href = res.redirectUrl;
+                  return;
+                }
+                if (res.free) {
+                  location.href = '/dashboard';
+                  return;
+                }
+                toast(res.message || 'Order created.', 'success');
+                $('#pay-btn').disabled = false;
+              } catch (err) {
+                toast(err.message, 'error');
+                $('#pay-btn').disabled = false;
+              }
+            });
+          } catch (err) {
+            $('#plan-title').textContent = 'Checkout unavailable';
+            $('#pay-note').textContent = err.message;
+          }
+        }
+
+        boot();
+      })();
+    </script>
+  </body>
+</html>
