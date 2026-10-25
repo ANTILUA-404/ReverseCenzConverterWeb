@@ -128,6 +128,12 @@ cp .env.example .env      # optional — dev login works without it
 npm start                 # → http://localhost:3000
 ```
 
+Or double-click **`start.bat`** on Windows (`./start.sh` on macOS/Linux) — it installs dependencies on
+first run and then boots the server.
+
+> The server must stay running in its own terminal window. Closing the terminal stops it; the data in
+> `data/db.json` survives.
+
 Open <http://localhost:3000> — you are redirected to `/en` (or `/id` if your browser prefers
 Indonesian). Click **Login with Discord**.
 
